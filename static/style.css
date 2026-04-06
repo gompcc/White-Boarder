@@ -123,6 +123,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  position: relative;
 }
 
 .mermaid-output {
@@ -133,6 +134,11 @@ body {
 .mermaid-output svg {
   max-width: 100%;
   height: auto;
+}
+
+.excalidraw-output {
+  position: absolute;
+  inset: 0;
 }
 
 /* Suggestions & Questions */
@@ -200,6 +206,12 @@ body {
   color: #aaa;
 }
 
+.toggle-group {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
 .toggle {
   font-size: 11px;
   padding: 3px 10px;
@@ -208,7 +220,6 @@ body {
   color: #888;
   border: 1px solid #333;
   cursor: pointer;
-  margin-left: auto;
 }
 
 .toggle.active {

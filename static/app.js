@@ -3,6 +3,7 @@
 let currentState = null;
 let renderCounter = 0;
 let mirrorLayout = true;
+let useExcalidraw = false;
 
 // --- Mermaid setup ---
 mermaid.initialize({
@@ -27,7 +28,7 @@ async function loadSessions() {
   list.innerHTML = sessions
     .map(
       (s) => `
-    <div class="session-item" onclick="resumeSession('${s.id}')">
+    <div class="session-item" onclick="resumeSession('${escapeHtml(s.id)}')">
       <div>
         <div class="name">${escapeHtml(s.name)}</div>
         <div class="meta">${s.created} · ${s.photo_count} captures</div>
@@ -148,6 +149,9 @@ async function endSession() {
       `Session ended!\n\nOutputs saved:\n- ${data.claude_md_path}\n- ${data.spec_md_path}`
     );
 
+    // Clean up Excalidraw if active
+    if (window.destroyExcalidraw) window.destroyExcalidraw();
+
     // Return to session picker
     document.getElementById("workspace").classList.add("hidden");
     document.getElementById("session-picker").classList.remove("hidden");
@@ -163,8 +167,8 @@ async function endSession() {
 async function renderState() {
   if (!currentState) return;
 
-  // Diagram
-  const container = document.getElementById("mermaid-output");
+  const mermaidContainer = document.getElementById("mermaid-output");
+  const excalidrawContainer = document.getElementById("excalidraw-output");
   const placeholder = document.getElementById("diagram-placeholder");
   const badge = document.getElementById("diagram-type-badge");
 
@@ -172,22 +176,30 @@ async function renderState() {
     placeholder.classList.add("hidden");
     badge.textContent = currentState.diagram_type || "";
 
-    // Render Mermaid diagram (unique ID each render to avoid conflicts)
-    renderCounter++;
-    const renderId = `mermaid-svg-${renderCounter}`;
-    try {
-      // Remove old SVG element if it exists from a previous failed render
-      const oldSvg = document.getElementById(renderId);
-      if (oldSvg) oldSvg.remove();
+    if (useExcalidraw && window.excalidrawLoaded) {
+      // --- Excalidraw rendering ---
+      mermaidContainer.classList.add("hidden");
+      excalidrawContainer.classList.remove("hidden");
 
-      const { svg } = await mermaid.render(renderId, currentState.diagram);
-      container.innerHTML = svg;
-    } catch (e) {
-      // Clean up any partial SVG mermaid may have left in the DOM
-      const partial = document.getElementById(renderId);
-      if (partial) partial.remove();
+      // Init Excalidraw if not already mounted
+      if (!excalidrawContainer.hasChildNodes()) {
+        window.initExcalidraw(excalidrawContainer);
+        // Small delay for React to mount
+        await new Promise((r) => setTimeout(r, 500));
+      }
 
-      container.innerHTML = `<pre style="color:#e74c3c;white-space:pre-wrap;">Diagram render error:\n${e.message}\n\nRaw:\n${escapeHtml(currentState.diagram)}</pre>`;
+      const ok = await window.updateExcalidraw(currentState.diagram);
+      if (!ok) {
+        // Fallback: show Mermaid if conversion fails
+        excalidrawContainer.classList.add("hidden");
+        mermaidContainer.classList.remove("hidden");
+        renderMermaid(mermaidContainer, currentState.diagram);
+      }
+    } else {
+      // --- Mermaid rendering ---
+      mermaidContainer.classList.remove("hidden");
+      excalidrawContainer.classList.add("hidden");
+      renderMermaid(mermaidContainer, currentState.diagram);
     }
   }
 
@@ -220,6 +232,23 @@ async function renderState() {
   }
 }
 
+async function renderMermaid(container, diagram) {
+  renderCounter++;
+  const renderId = `mermaid-svg-${renderCounter}`;
+  try {
+    const oldSvg = document.getElementById(renderId);
+    if (oldSvg) oldSvg.remove();
+
+    const { svg } = await mermaid.render(renderId, diagram);
+    container.innerHTML = svg;
+  } catch (e) {
+    const partial = document.getElementById(renderId);
+    if (partial) partial.remove();
+
+    container.innerHTML = `<pre style="color:#e74c3c;white-space:pre-wrap;">Diagram render error:\n${e.message}\n\nRaw:\n${escapeHtml(diagram)}</pre>`;
+  }
+}
+
 // --- Utilities ---
 
 function showLoading(show) {
@@ -234,8 +263,24 @@ function escapeHtml(text) {
 
 function toggleMirror() {
   mirrorLayout = !mirrorLayout;
-  const btn = document.getElementById("btn-mirror");
-  btn.classList.toggle("active", mirrorLayout);
+  document.getElementById("btn-mirror").classList.toggle("active", mirrorLayout);
+}
+
+function toggleRenderer() {
+  useExcalidraw = !useExcalidraw;
+  const btn = document.getElementById("btn-renderer");
+  btn.classList.toggle("active", useExcalidraw);
+  btn.textContent = useExcalidraw ? "Mermaid" : "Excalidraw";
+
+  if (!useExcalidraw && window.destroyExcalidraw) {
+    window.destroyExcalidraw();
+    document.getElementById("excalidraw-output").innerHTML = "";
+  }
+
+  // Re-render with current state
+  if (currentState && currentState.diagram) {
+    renderState();
+  }
 }
 
 // --- Keyboard Shortcuts ---

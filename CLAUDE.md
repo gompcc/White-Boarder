@@ -4,41 +4,38 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What is White Boarder?
 
-A local Mac whiteboarding partner app. You whiteboard on a physical board, the app captures photos, maintains an incrementally-updated Mermaid diagram, and provides suggestions/questions. Outputs a `CLAUDE.md` and `spec.md` per session.
+A local Mac whiteboarding partner. Captures whiteboard photos via webcam, sends to Claude Vision API, maintains an incrementally-updated diagram with suggestions and questions. Outputs `claude.md` + `spec.md` per session.
 
 ## Tech Stack
 
-Python 3.13 + Flask, OpenCV for camera, Anthropic API (vision) for AI analysis, Mermaid.js for diagram rendering. Vanilla HTML/CSS/JS frontend — no framework.
+Python 3.13 + Flask, OpenCV (camera only), Anthropic API (vision), Mermaid.js + Excalidraw (dual renderer). Vanilla HTML/CSS/JS frontend — no build step.
 
 ## Setup
 
 ```bash
-# 1. Add your API key to .env (git-ignored, never committed)
-cp .env.example .env
-# Edit .env → ANTHROPIC_API_KEY=sk-ant-...
-
-# 2. Activate and run
 source venv/bin/activate
-python app.py                    # http://localhost:5050
-pip install -r requirements.txt  # Install/update deps
+cp .env.example .env           # Add ANTHROPIC_API_KEY
+python app.py                  # http://localhost:5050
+pip install -r requirements.txt
 ```
 
 ## Architecture
 
-- `app.py` �� Flask routes, orchestrates capture → analysis ��� state update
-- `camera.py` — OpenCV webcam capture (manual button, auto-detect is future work)
-- `claude_bridge.py` — Sends whiteboard photo (base64) + context to Claude API with vision, parses JSON response
-- `session.py` — Session state (diagram, suggestions, questions), persistence to `sessions/{id}/state.json`, output generation
-- `static/` — Single-page UI: CSS Grid layout (2/3 diagram | 1/3 suggestions+questions), Mermaid.js rendering
-- `sessions/` — Persisted session data, photos, generated outputs
+- `app.py` — Flask routes, orchestrates capture → analysis → state update
+- `camera.py` — OpenCV webcam capture (manual button; `use_reloader=False` for macOS camera permissions)
+- `claude_bridge.py` — Base64-encodes photos, sends to Claude API with vision, parses JSON. Mirror/Interpret mode toggle
+- `session.py` — Session state, persistence to `sessions/{name}/state.json`, deduplicates suggestions, generates outputs
+- `static/` — Single-page UI with CSS Grid (2/3 diagram | 1/3 panels). Excalidraw loaded via esm.sh CDN as ES module
+- `sessions/` — Named session directories with state, photos, generated outputs
 
 ## Key Design Decisions
 
 - **Anthropic API with vision** — sends actual whiteboard photos to Claude Sonnet; API key in `.env` (git-ignored)
-- **Security** — `.env` in `.gitignore`, `.env.example` checked in as template, no secrets in code
-- **Incremental diagram updates** — Claude receives current Mermaid state + changes, returns patched diagram (not full regeneration)
-- **Cumulative dismissable suggestions** — new suggestions append, user dismisses addressed ones, dismissed list sent to Claude to avoid repetition
-- **Session persistence** — save/resume via JSON state files
+- **Dual renderer** — Mermaid.js (default, structured) or Excalidraw (interactive, freeform via `mermaid-to-excalidraw` conversion). Toggle in UI
+- **Mirror vs Interpret** — Mirror mode copies whiteboard layout faithfully; Interpret mode lets Claude optimize the diagram
+- **Incremental updates** — Claude receives current diagram state + diff context, returns patched diagram
+- **Cumulative suggestions** — deduplicated, dismissable, new ones get green outline. Dismissed list sent to Claude to avoid repetition
+- **Named sessions** — directory path is the session name, not a timestamp ID
 
 ## Workflow Rules
 

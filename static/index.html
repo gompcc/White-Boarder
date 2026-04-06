@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>White Boarder</title>
   <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="https://esm.sh/@excalidraw/excalidraw@0.18.0/dist/prod/index.css">
   <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 </head>
 <body>
@@ -26,10 +27,14 @@
         <div class="panel-header">
           <span id="session-title">Diagram</span>
           <span id="diagram-type-badge" class="badge"></span>
-          <button id="btn-mirror" class="toggle active" onclick="toggleMirror()" title="Mirror whiteboard layout">Mirror</button>
+          <div class="toggle-group">
+            <button id="btn-mirror" class="toggle active" onclick="toggleMirror()" title="Mirror whiteboard layout">Mirror</button>
+            <button id="btn-renderer" class="toggle" onclick="toggleRenderer()" title="Switch renderer">Excalidraw</button>
+          </div>
         </div>
         <div id="diagram-container" class="diagram-container">
           <div id="mermaid-output" class="mermaid-output"></div>
+          <div id="excalidraw-output" class="excalidraw-output hidden"></div>
           <p id="diagram-placeholder" class="placeholder">
             Capture your whiteboard to generate a diagram
           </p>
@@ -72,5 +77,51 @@
   </div>
 
   <script src="/static/app.js"></script>
+
+  <!-- Excalidraw module (loaded async, uses esm.sh CDN) -->
+  <script type="module">
+    import React from "https://esm.sh/react@18.3.1";
+    import { createRoot } from "https://esm.sh/react-dom@18.3.1/client?deps=react@18.3.1";
+    import { Excalidraw, convertToExcalidrawElements } from "https://esm.sh/@excalidraw/excalidraw@0.18.0?deps=react@18.3.1,react-dom@18.3.1";
+    import { parseMermaidToExcalidraw } from "https://esm.sh/@excalidraw/mermaid-to-excalidraw@2.2.2";
+
+    let excalidrawAPI = null;
+    let root = null;
+
+    window.excalidrawLoaded = true;
+
+    window.initExcalidraw = function (container) {
+      if (root) return;
+      root = createRoot(container);
+      root.render(
+        React.createElement(Excalidraw, {
+          excalidrawAPI: (api) => { excalidrawAPI = api; },
+          initialData: {
+            appState: { viewBackgroundColor: "#0f0f0f", theme: "dark" },
+          },
+          theme: "dark",
+        })
+      );
+    };
+
+    window.updateExcalidraw = async function (mermaidText) {
+      if (!excalidrawAPI) return false;
+      try {
+        const { elements } = await parseMermaidToExcalidraw(mermaidText, { fontSize: 16 });
+        const excElements = convertToExcalidrawElements(elements);
+        excalidrawAPI.updateScene({ elements: excElements });
+        excalidrawAPI.scrollToContent();
+        return true;
+      } catch (e) {
+        console.error("Mermaid→Excalidraw conversion error:", e);
+        return false;
+      }
+    };
+
+    window.destroyExcalidraw = function () {
+      if (root) { root.unmount(); root = null; }
+      excalidrawAPI = null;
+    };
+  </script>
 </body>
 </html>
